@@ -1,0 +1,5 @@
+{
+  "Default - ssdp:all": "ST: ssdp:all",
+  "UPnP Root Device": "ST: upnp:rootdevice",
+  "Exploit Test 1": "ST: ssdp:all\\r\\nX-Test: kader11000"
+}
