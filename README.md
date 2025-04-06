@@ -6,11 +6,11 @@
 
 1. Make sure you have Python 3 installed.
 2. Install Flask if not already installed:
-   pip install flask
+   pip install flask requests shodan
 3. Run the script:
    python app.py
 4. Open your browser and go to:
-   http://localhost:8080
+   http://localhost:(xxxx)
 5. Login with password: kader11000
 
 ## Files
