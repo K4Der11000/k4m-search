@@ -1,187 +1,148 @@
-from flask import Flask, request, redirect, session, url_for, render_template_string, send_file
-import socket, time, json, os
+from flask import Flask, render_template_string, request, redirect, url_for import socket import threading import json
 
-app = Flask(__name__)
-app.secret_key = "super-secret-key"
+app = Flask(__name) PASSWORD = "kader11000" RESULTS = []
 
-SHODAN_API_KEY = "D0E8rHMlLMyRdOnjF9WXSQ7juLDz1Owk"
-PAYLOADS_FILE = "payloads.json"
-RESULTS = []
+HTML_TEMPLATE = """
 
-def load_presets():
-    if os.path.exists(PAYLOADS_FILE):
-        with open(PAYLOADS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
-
-def save_presets(presets):
-    with open(PAYLOADS_FILE, "w", encoding="utf-8") as f:
-        json.dump(presets, f, ensure_ascii=False, indent=2)
-
-def scan_msearch(ip_list, ports=[1900], timeout=3, custom_payload=""):
-    RESULTS.clear()
-
-    base_msg = (
-        'M-SEARCH * HTTP/1.1\r\n'
-        'HOST: 239.255.255.250:1900\r\n'
-        'MAN: "ssdp:discover"\r\n'
-        'MX: 1\r\n'
-    )
-
-    full_msg = base_msg + (custom_payload.strip() + '\r\n\r\n' if custom_payload else 'ST: ssdp:all\r\n\r\n')
-    payload_check = custom_payload.strip().split('\r\n')[0] if custom_payload else "ssdp:all"
-
-    for ip in ip_list:
-        for port in ports:
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.settimeout(timeout)
-                sock.sendto(full_msg.encode(), (ip, port))
-                data, addr = sock.recvfrom(2048)
-                response = data.decode(errors="ignore")
-                triggered = "Yes" if payload_check.lower() in response.lower() else "No"
-                RESULTS.append({
-                    "ip": f"{ip}:{port}",
-                    "response": response.replace("\r\n", "<br>"),
-                    "triggered": triggered
-                })
-            except:
-                pass
-            finally:
-                sock.close()
-            time.sleep(0.2)
-
-@app.route("/", methods=["GET"])
-def index():
-    if not session.get("authenticated"):
-        return redirect(url_for("login"))
-    return render_template_string(RESULT_TEMPLATE, results=RESULTS)
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        if request.form.get("password") == "kader11000":
-            session["authenticated"] = True
-            return redirect(url_for("index"))
-    return '''
-    <form method="post">
+<!DOCTYPE html><html lang='en'>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M-SEARCH RCE Scanner</title>
+    <style>
+        @keyframes banner-glow {
+            0% { text-shadow: 0 0 5px #4CAF50; }
+            50% { text-shadow: 0 0 20px #4CAF50; }
+            100% { text-shadow: 0 0 5px #4CAF50; }
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background-color: #f2f2f2;
+        }
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
+        h1.banner {
+            text-align: center;
+            font-size: 28px;
+            color: #4CAF50;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+            animation: banner-glow 2s infinite ease-in-out;
+        }
+        h2, h3 {
+            text-align: center;
+            color: #333;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        input, select {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        input[type="submit"] {
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        input[type="submit"]:hover {
+            background-color: #45a049;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 30px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 12px;
+            text-align: center;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .login-box {
+            max-width: 300px;
+            margin: 100px auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 class="banner">Powered by kader11000</h1>
+{% if not authenticated %}
+    <div class="login-box">
         <h3>Login</h3>
-        <input type="password" name="password" placeholder="Enter password">
-        <button type="submit">Login</button>
-    </form>
-    '''
+        <form method="POST">
+            <input type="password" name="password" placeholder="Password" required><br>
+            <input type="submit" value="Login">
+        </form>
+    </div>
+{% else %}
+    <h2>M-SEARCH + RCE Scanner</h2>
+    <form method="POST" action="/scan-options">
+        <label>Target IP(s) (comma separated):</label>
+        <input type="text" name="target_ips" placeholder="192.168.1.1,10.0.0.2" required><label>Ports (comma separated):</label>
+    <input type="text" name="ports" value="1900">
 
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
-@app.route("/scan-options")
-def scan_options():
-    if not session.get("authenticated"):
-        return redirect(url_for("login"))
-    return render_template_string(SCAN_OPTIONS_TEMPLATE, presets=load_presets())
-
-@app.route("/scan-manual", methods=["POST"])
-def scan_manual():
-    if not session.get("authenticated"):
-        return redirect(url_for("login"))
-
-    raw_ips = request.form.get("manual_ips", "")
-    raw_ports = request.form.get("ports", "1900")
-    selected_payload = request.form.get("preset_payload", "")
-    custom_payload = request.form.get("custom_payload", "")
-
-    ip_list = [ip.strip() for ip in raw_ips.replace(",", "\n").splitlines() if ip.strip()]
-    ports = [int(p.strip()) for p in raw_ports.split(",") if p.strip().isdigit()]
-    payload_to_use = custom_payload.strip() if custom_payload.strip() else selected_payload
-
-    if ip_list and ports:
-        scan_msearch(ip_list, ports=ports, custom_payload=payload_to_use)
-    return redirect(url_for("index"))
-
-@app.route("/add-payload", methods=["POST"])
-def add_payload():
-    if not session.get("authenticated"):
-        return redirect(url_for("login"))
-
-    name = request.form.get("payload_name", "").strip()
-    content = request.form.get("payload_content", "").strip()
-    if name and content:
-        presets = load_presets()
-        presets[name] = content.replace("\r", "").replace("\n", "\\r\\n")
-        save_presets(presets)
-    return redirect(url_for("scan_options"))
-
-@app.route("/export-html")
-def export_html():
-    if not session.get("authenticated"):
-        return redirect(url_for("login"))
-    html = render_template_string(RESULT_TEMPLATE, results=RESULTS)
-    with open("msearch_results.html", "w", encoding="utf-8") as f:
-        f.write(html)
-    return send_file("msearch_results.html", as_attachment=True)
-
-# HTML Templates
-SCAN_OPTIONS_TEMPLATE = """
-<h2>M-SEARCH Scanner Options</h2>
-<form method="post" action="{{ url_for('scan_manual') }}">
-    <label>Target IPs:</label><br>
-    <textarea name="manual_ips" rows="4" placeholder="192.168.1.1, 8.8.8.8"></textarea><br><br>
-    
-    <label>Ports:</label>
-    <input type="text" name="ports" placeholder="1900, 2000"><br><br>
-    
-    <label>Select Preset Payload:</label>
-    <select name="preset_payload">
-        {% for label, payload in presets.items() %}
-            <option value="{{ payload }}">{{ label }}</option>
+    <label>Payload Type:</label>
+    <select name="payload">
+        {% for name, val in payloads.items() %}
+            <option value="{{ name }}">{{ name }}</option>
         {% endfor %}
-    </select><br><br>
+    </select>
 
-    <label>Or enter a custom payload:</label><br>
-    <textarea name="custom_payload" rows="4" placeholder="ST: upnp:rootdevice\r\nX-Exploit: test\r\n"></textarea><br><br>
+    <label>Remote Command (RCE):</label>
+    <input type="text" name="rce_command" placeholder="id">
 
-    <button type="submit">Scan Now</button>
+    <input type="submit" value="Scan">
 </form>
 
-<hr>
+{% if results %}
+    <h3>Scan Results</h3>
+    <table>
+        <tr>
+            <th>IP</th>
+            <th>Triggered?</th>
+            <th>Exploited?</th>
+            <th>Command Output</th>
+            <th>Response</th>
+        </tr>
+        {% for r in results %}
+            <tr>
+                <td>{{ r.ip }}</td>
+                <td>{{ r.triggered }}</td>
+                <td>{{ r.exploited }}</td>
+                <td>{{ r.exec_result|safe }}</td>
+                <td>{{ r.response|safe }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+{% endif %}
 
-<h3>Add New Payload</h3>
-<form method="post" action="{{ url_for('add_payload') }}">
-    <label>Payload Name:</label>
-    <input type="text" name="payload_name" required><br>
-    
-    <label>Payload Content:</label><br>
-    <textarea name="payload_content" rows="3" required></textarea><br>
+{% endif %}
 
-    <button type="submit">Save Payload</button>
-</form>
+</div>
+</body>
+</html>
+"""(The rest of the Python code remains unchanged)
 
-<br><a href="/">Back to Results</a>
-"""
-
-RESULT_TEMPLATE = """
-<h2>Scan Results</h2>
-<table border="1" cellpadding="6">
-    <tr>
-        <th>IP</th>
-        <th>Triggered Payload?</th>
-        <th>Response</th>
-    </tr>
-    {% for entry in results %}
-    <tr>
-        <td>{{ entry.ip }}</td>
-        <td>{{ entry.triggered }}</td>
-        <td>{{ entry.response|safe }}</td>
-    </tr>
-    {% endfor %}
-</table>
-<br>
-<a href="/scan-options">New Scan</a> | 
-<a href="/export-html">Export HTML</a> | 
-<a href="/logout">Logout</a>
-"""
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
